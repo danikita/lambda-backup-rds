@@ -7,7 +7,7 @@ RUN yum install -y \
     curl \
     && yum clean all
 
-# Baixa a chave GPG para arquivo e importa
+# Baixa e importa a chave GPG da Microsoft
 RUN curl -L https://packages.microsoft.com/keys/microsoft.asc -o /tmp/microsoft.asc \
     && rpm --import /tmp/microsoft.asc \
     && rm /tmp/microsoft.asc
@@ -16,8 +16,9 @@ RUN curl -L https://packages.microsoft.com/keys/microsoft.asc -o /tmp/microsoft.
 RUN curl -L https://packages.microsoft.com/config/rhel/7/prod.repo \
         -o /etc/yum.repos.d/mssql-release.repo
 
-# Instala o driver ODBC 17
-RUN ACCEPT_EULA=Y yum install -y --nogpgcheck msodbcsql17 \
+# Remove pacote conflitante e instala o driver ODBC 17
+RUN yum remove -y openssl-snapsafe-libs \
+    && ACCEPT_EULA=Y yum install -y --nogpgcheck msodbcsql17 \
     && yum clean all
 
 RUN pip install --no-cache-dir pyodbc boto3
