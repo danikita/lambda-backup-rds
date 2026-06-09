@@ -28,19 +28,20 @@ S3_PREFIX = config.get("S3_PREFIX")
 
 def get_db_credentials():
 
-    # Se SECRET_ARN estiver preenchido, usa Secrets Manager
-    if config.get("SECRET_ARN"):
+    secret_arn = config.get("SECRET_ARN", "").strip()
+
+    # Só usa Secrets se tiver valor válido
+    if secret_arn:
         secrets_client = boto3.client("secretsmanager", region_name="us-east-1")
-        response = secrets_client.get_secret_value(SecretId=config.get("SECRET_ARN"))
+        response = secrets_client.get_secret_value(SecretId=secret_arn)
         secret = json.loads(response["SecretString"])
         return secret["username"], secret["password"]
 
-    # Caso contrário, usa usuário/senha manual
+    # Senha manual
     return (
         config.get("DB_USER"),
         config.get("DB_PASSWORD")
     )
-
 
 # Timestamp para nome do arquivo
 timestamp = datetime.datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y%m%d%H%M%S")
