@@ -7,12 +7,16 @@ RUN yum install -y \
     curl \
     && yum clean all
 
-# Importa a chave GPG da Microsoft antecipadamente e adiciona o repositório
-RUN curl -L https://packages.microsoft.com/keys/microsoft.asc | rpm --import - \
-    && curl -L https://packages.microsoft.com/config/rhel/7/prod.repo \
+# Baixa a chave GPG para arquivo e importa
+RUN curl -L https://packages.microsoft.com/keys/microsoft.asc -o /tmp/microsoft.asc \
+    && rpm --import /tmp/microsoft.asc \
+    && rm /tmp/microsoft.asc
+
+# Adiciona o repositório da Microsoft
+RUN curl -L https://packages.microsoft.com/config/rhel/7/prod.repo \
         -o /etc/yum.repos.d/mssql-release.repo
 
-# Instala o driver sem prompt interativo de GPG
+# Instala o driver ODBC 17
 RUN ACCEPT_EULA=Y yum install -y --nogpgcheck msodbcsql17 \
     && yum clean all
 
