@@ -1,20 +1,15 @@
 FROM public.ecr.aws/lambda/python:3.11
 
-# Instala dependências mais leves possível
 RUN yum install -y \
-    curl \
-    gnupg2 \
     unixODBC-devel \
     && curl https://packages.microsoft.com/config/rhel/7/prod.repo \
     -o /etc/yum.repos.d/mssql-release.repo \
     && ACCEPT_EULA=Y yum install -y msodbcsql18 \
-    && yum clean all
+    && yum clean all \
+    && rm -rf /var/cache/yum
 
-# Instala Python libs
-RUN pip install pyodbc
+RUN pip install pyodbc --no-cache-dir
 
-# Copia código
 COPY app.py ${LAMBDA_TASK_ROOT}
 
-# Handler
 CMD ["app.lambda_handler"]
