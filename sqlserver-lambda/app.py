@@ -6,7 +6,10 @@ import boto3
 import datetime
 from zoneinfo import ZoneInfo
 
-def load_config(file_path="config.txt"):
+def load_config():
+    base_path = os.getcwd()
+    file_path = os.path.join(base_path, "config.txt")
+
     config = {}
     with open(file_path, "r") as file:
         for line in file:
