@@ -1,4 +1,3 @@
-
 import os
 import json
 import pyodbc
@@ -29,36 +28,31 @@ S3_PREFIX = config.get("S3_PREFIX")
 
 def get_db_credentials():
 
-    # If SECRET_ARN is populated, use AWS Secrets Manager.
+    # Se SECRET_ARN estiver preenchido, usa Secrets Manager
     if config.get("SECRET_ARN"):
         secrets_client = boto3.client("secretsmanager", region_name="us-east-1")
         response = secrets_client.get_secret_value(SecretId=config.get("SECRET_ARN"))
         secret = json.loads(response["SecretString"])
         return secret["username"], secret["password"]
 
-    # Otherwise, use the credentials from the file.
+    # Caso contrário, usa usuário/senha manual
     return (
         config.get("DB_USER"),
         config.get("DB_PASSWORD")
     )
 
 
-# Timestamp for the file name
+# Timestamp para nome do arquivo
 timestamp = datetime.datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y%m%d%H%M%S")
 
-# Function to retrieve credentials from AWS Secrets Manager.
-def get_db_credentials(secret_arn):
-    secrets_client = boto3.client("secretsmanager", region_name="us-east-1")
-    response = secrets_client.get_secret_value(SecretId=secret_arn)
-    secret = json.loads(response["SecretString"])
-    return secret["username"], secret["password"]
 
 # Main Lambda function
 def lambda_handler(event, context):
     results = []
 
     try:
-        db_user, db_password = get_db_credentials(SECRET_ARN)
+        # ✅ CORRIGIDO: sem passar parâmetro
+        db_user, db_password = get_db_credentials()
 
         conn_str = (
             f"DRIVER={{ODBC Driver 18 for SQL Server}};"
@@ -71,17 +65,23 @@ def lambda_handler(event, context):
         conn = pyodbc.connect(conn_str)
         cursor = conn.cursor()
 
-        cursor.execute("SELECT name FROM sys.databases WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb', 'rdsadmin')")
+        cursor.execute("""
+            SELECT name 
+            FROM sys.databases 
+            WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb', 'rdsadmin')
+        """)
         databases = [row[0] for row in cursor.fetchall()]
 
         for db in databases:
             s3_arn = f"arn:aws:s3:::{S3_BUCKET}/{S3_PREFIX}{db}_{timestamp}.bak"
+
             sql = f"""
             exec msdb.dbo.rds_backup_database 
                 @source_db_name='{db}', 
                 @s3_arn_to_backup_to='{s3_arn}', 
                 @overwrite_S3_backup_file=1;
             """
+
             try:
                 cursor.execute(sql)
                 conn.commit()
