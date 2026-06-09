@@ -27,27 +27,23 @@ S3_PREFIX = config.get("S3_PREFIX")
 
 
 def get_db_credentials():
+    # ✅ CORRETO: tudo dentro da função (indentado)
+    secret_arn = config.get("SECRET_ARN")
 
+    # ✅ Usa Secrets só se for ARN válido
+    if secret_arn and secret_arn.strip().startswith("arn:"):
+        secret_arn = secret_arn.strip()
+        secrets_client = boto3.client("secretsmanager", region_name="us-east-1")
+        response = secrets_client.get_secret_value(SecretId=secret_arn)
+        secret = json.loads(response["SecretString"])
+        return secret["username"], secret["password"]
 
-secret_arn = config.get("SECRET_ARN")
-
-# ✅ valida se é realmente um ARN válido
-if secret_arn and secret_arn.startswith("arn:"):
-    
-    secret_arn = secret_arn.strip()
-
-    secrets_client = boto3.client("secretsmanager", region_name="us-east-1")
-    response = secrets_client.get_secret_value(SecretId=secret_arn)
-    secret = json.loads(response["SecretString"])
-
-    return secret["username"], secret["password"]
-
-
-    # Senha manual
+    # ✅ Senha manual
     return (
         config.get("DB_USER"),
         config.get("DB_PASSWORD")
     )
+
 
 # Timestamp para nome do arquivo
 timestamp = datetime.datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y%m%d%H%M%S")
@@ -58,7 +54,6 @@ def lambda_handler(event, context):
     results = []
 
     try:
-        # ✅ CORRIGIDO: sem passar parâmetro
         db_user, db_password = get_db_credentials()
 
         conn_str = (
@@ -103,3 +98,4 @@ def lambda_handler(event, context):
         "statusCode": 200 if all("OK" in r for r in results) else 500,
         "body": results
     }
+``
