@@ -98,4 +98,4 @@ def lambda_handler(event, context):
         "statusCode": 200 if all("OK" in r for r in results) else 500,
         "body": results
     }
-``
+
