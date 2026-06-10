@@ -56,6 +56,13 @@ def lambda_handler(event, context):
     try:
         db_user, db_password = get_db_credentials()
 
+        # LOG TEMPORÁRIO - remover após troubleshooting
+        print(f"DB_HOST: '{DB_HOST}'")
+        print(f"DB_PORT: '{DB_PORT}'")
+        print(f"DB_USER: '{db_user}'")
+        print(f"DB_PASSWORD length: {len(db_password) if db_password else 0}")
+        print(f"SECRET_ARN: '{config.get('SECRET_ARN')}'")
+
         conn_str = (
             f"DRIVER={{ODBC Driver 17 for SQL Server}};"
             f"SERVER={DB_HOST},{DB_PORT};"
@@ -63,6 +70,8 @@ def lambda_handler(event, context):
             f"PWD={db_password};"
             f"Encrypt=no;"
         )
+        
+        print(f"CONN_STR (sem senha): DRIVER=...;SERVER={DB_HOST},{DB_PORT};UID={db_user};")
 
         conn = pyodbc.connect(conn_str)
         cursor = conn.cursor()
