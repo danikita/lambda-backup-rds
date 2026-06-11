@@ -185,7 +185,8 @@ aws lambda invoke \
     "DB_PORT": "<port>",
     "SECRET_ARN": "<secrets-manager-arn>",
     "S3_BUCKET": "<bucket-name>",
-    "S3_PREFIX": "<prefix>/"
+    "S3_PREFIX": "<prefix>/",
+    "BACKUP_TYPE": "<FULL/DIFFERENTIAL/LOG>"
   }' \
   response.json \
 && aws logs tail /aws/lambda/lambda-sqlserver-backup --follow
@@ -205,13 +206,27 @@ aws lambda invoke \
     "DB_USER": "<db-user>",
     "DB_PASSWORD": "<db-password>",
     "S3_BUCKET": "<bucket-name>",
-    "S3_PREFIX": "<prefix>/"
+    "S3_PREFIX": "<prefix>/",
+    "BACKUP_TYPE": "<FULL/DIFFERENTIAL/LOG>"
   }' \
   response.json \
 && aws logs tail /aws/lambda/lambda-sqlserver-backup --follow
 ```
 
 The `--follow` flag streams CloudWatch logs in real time so you can verify whether the backup completed successfully.
+
+## Backup Types
+
+The Lambda supports three backup types via the `BACKUP_TYPE` field in the event payload:
+
+| Value          | Description                                                                 | File extension |
+|----------------|-----------------------------------------------------------------------------|----------------|
+| `FULL`         | Complete database backup. Default if `BACKUP_TYPE` is omitted.              | `.bak`         |
+| `DIFFERENTIAL` | Only changes since the last FULL backup. Requires a prior FULL backup.      | `.diff.bak`    |
+| `LOG`          | Transaction log backup. Requires Full Recovery Model and a prior FULL backup.| `.trn`         |
+
+> **Important:** `DIFFERENTIAL` and `LOG` backups depend on a `FULL` backup existing first.  
+> `LOG` backups additionally require the database to be in **Full Recovery Model**.
 
 ---
 
@@ -259,6 +274,87 @@ aws events put-targets \
 ```
 
 Once configured, EventBridge will automatically trigger the backup function on the defined schedule without any manual invocation.
+
+## Suggested EventBridge Schedule (Multi-Tier Strategy)
+
+A common backup strategy uses **three separate EventBridge rules pointing to the same Lambda**, each passing a different `BACKUP_TYPE` in the input:
+
+| Rule                   | Type         | Suggested frequency       |
+|------------------------|--------------|---------------------------|
+| Full backup            | `FULL`       | Weekly (e.g. Sunday 1 AM) |
+| Differential backup    | `DIFFERENTIAL` | Daily (e.g. every day 1 AM, except Sunday) |
+| Log backup             | `LOG`        | Every few hours (e.g. every 4 hours) |
+
+### 1. Full backup — weekly (Sunday at 1:00 AM UTC)
+
+```bash
+aws events put-rule \
+  --name lambda-sqlserver-backup-full \
+  --schedule-expression "cron(0 1 ? * SUN *)"
+
+aws lambda add-permission \
+  --function-name lambda-sqlserver-backup \
+  --statement-id eventbridge-invoke-full \
+  --action lambda:InvokeFunction \
+  --principal events.amazonaws.com \
+  --source-arn arn:aws:events:<region>:<account-id>:rule/lambda-sqlserver-backup-full
+
+aws events put-targets \
+  --rule lambda-sqlserver-backup-full \
+  --targets '[{
+    "Id": "full",
+    "Arn": "arn:aws:lambda:<region>:<account-id>:function:lambda-sqlserver-backup",
+    "Input": "{\"DB_HOST\":\"<rds-endpoint>\",\"DB_PORT\":\"1433\",\"SECRET_ARN\":\"<secrets-manager-arn>\",\"S3_BUCKET\":\"<bucket-name>\",\"S3_PREFIX\":\"backups/\",\"BACKUP_TYPE\":\"FULL\"}"
+  }]'
+```
+
+### 2. Differential backup — daily (Mon–Sat at 1:00 AM UTC)
+
+```bash
+aws events put-rule \
+  --name lambda-sqlserver-backup-differential \
+  --schedule-expression "cron(0 1 ? * MON-SAT *)"
+
+aws lambda add-permission \
+  --function-name lambda-sqlserver-backup \
+  --statement-id eventbridge-invoke-differential \
+  --action lambda:InvokeFunction \
+  --principal events.amazonaws.com \
+  --source-arn arn:aws:events:<region>:<account-id>:rule/lambda-sqlserver-backup-differential
+
+aws events put-targets \
+  --rule lambda-sqlserver-backup-differential \
+  --targets '[{
+    "Id": "differential",
+    "Arn": "arn:aws:lambda:<region>:<account-id>:function:lambda-sqlserver-backup",
+    "Input": "{\"DB_HOST\":\"<rds-endpoint>\",\"DB_PORT\":\"1433\",\"SECRET_ARN\":\"<secrets-manager-arn>\",\"S3_BUCKET\":\"<bucket-name>\",\"S3_PREFIX\":\"backups/\",\"BACKUP_TYPE\":\"DIFFERENTIAL\"}"
+  }]'
+```
+
+### 3. Log backup — every 4 hours
+
+```bash
+aws events put-rule \
+  --name lambda-sqlserver-backup-log \
+  --schedule-expression "rate(4 hours)"
+
+aws lambda add-permission \
+  --function-name lambda-sqlserver-backup \
+  --statement-id eventbridge-invoke-log \
+  --action lambda:InvokeFunction \
+  --principal events.amazonaws.com \
+  --source-arn arn:aws:events:<region>:<account-id>:rule/lambda-sqlserver-backup-log
+
+aws events put-targets \
+  --rule lambda-sqlserver-backup-log \
+  --targets '[{
+    "Id": "log",
+    "Arn": "arn:aws:lambda:<region>:<account-id>:function:lambda-sqlserver-backup",
+    "Input": "{\"DB_HOST\":\"<rds-endpoint>\",\"DB_PORT\":\"1433\",\"SECRET_ARN\":\"<secrets-manager-arn>\",\"S3_BUCKET\":\"<bucket-name>\",\"S3_PREFIX\":\"backups/\",\"BACKUP_TYPE\":\"LOG\"}"
+  }]'
+```
+
+> Adjust schedules and the `Input` payload to match your environment. The `Input` field is how EventBridge passes the payload to the Lambda when triggered automatically — it replaces the `--payload` used in manual invocations.
 
 ---
 
