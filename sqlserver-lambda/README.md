@@ -259,3 +259,30 @@ aws events put-targets \
 ```
 
 Once configured, EventBridge will automatically trigger the backup function on the defined schedule without any manual invocation.
+
+---
+
+## Extra Step — S3 Lifecycle Policy (Automatic Backup Retention)
+
+To avoid indefinite storage growth, you can configure an S3 lifecycle rule to automatically delete backup files after a set number of days.
+
+The example below deletes all objects in the bucket after **7 days**:
+
+```bash
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket <bucket-name> \
+  --lifecycle-configuration '{
+    "Rules": [
+      {
+        "ID": "DeleteAfter7Days",
+        "Filter": { "Prefix": "" },
+        "Status": "Enabled",
+        "Expiration": { "Days": 7 }
+      }
+    ]
+  }'
+```
+
+To apply the rule only to a specific folder (prefix) instead of the entire bucket, replace `"Prefix": ""` with the desired path, e.g. `"Prefix": "sqlserver-backups/"`.
+
+Adjust the `Days` value to match your retention policy.
