@@ -358,11 +358,23 @@ aws events put-targets \
 
 ---
 
+---
+
 ## Extra Step — S3 Lifecycle Policy (Automatic Backup Retention)
 
-To avoid indefinite storage growth, you can configure an S3 lifecycle rule to automatically delete backup files after a set number of days.
+Since full, differential, and log backups have different sizes and recovery purposes, it makes sense to apply **different retention periods per backup type**. The file naming convention used by this Lambda (`FULL`, `DIFFERENTIAL`, `LOG` in the filename) makes it straightforward to target each type with a separate lifecycle rule using S3 prefixes.
 
-The example below deletes all objects in the bucket after **7 days**:
+### Suggested retention policy
+
+| Backup type    | Suggested retention | Rationale                                                      |
+|----------------|---------------------|----------------------------------------------------------------|
+| `FULL`         | 30 days             | Kept longer as the base for any restore chain                  |
+| `DIFFERENTIAL` | 7 days              | Only useful between two FULL backups                           |
+| `LOG`          | 2 days              | High frequency; only needed for point-in-time recovery windows |
+
+### AWS CLI command
+
+The rule below applies all three retention policies at once, assuming your `S3_PREFIX` is `backups/`:
 
 ```bash
 aws s3api put-bucket-lifecycle-configuration \
@@ -370,15 +382,62 @@ aws s3api put-bucket-lifecycle-configuration \
   --lifecycle-configuration '{
     "Rules": [
       {
-        "ID": "DeleteAfter7Days",
-        "Filter": { "Prefix": "" },
+        "ID": "RetainFullBackups30Days",
+        "Filter": { "Prefix": "backups/" },
+        "Status": "Enabled",
+        "Expiration": { "Days": 30 }
+      },
+      {
+        "ID": "RetainDifferentialBackups7Days",
+        "Filter": { "Prefix": "backups/" },
         "Status": "Enabled",
         "Expiration": { "Days": 7 }
+      },
+      {
+        "ID": "RetainLogBackups2Days",
+        "Filter": { "Prefix": "backups/" },
+        "Status": "Enabled",
+        "Expiration": { "Days": 2 }
       }
     ]
   }'
 ```
 
-To apply the rule only to a specific folder (prefix) instead of the entire bucket, replace `"Prefix": ""` with the desired path, e.g. `"Prefix": "sqlserver-backups/"`.
+> **Note:** For the prefix-based rules above to correctly target each backup type independently, the cleanest approach is to use **separate S3 prefixes per type** — e.g. `backups/full/`, `backups/differential/`, `backups/log/`. To do this, set `S3_PREFIX` accordingly in each EventBridge rule's `Input` payload. This way each lifecycle rule targets only its own prefix with no overlap.
 
-Adjust the `Days` value to match your retention policy.
+### Example with separate prefixes
+
+```bash
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket <bucket-name> \
+  --lifecycle-configuration '{
+    "Rules": [
+      {
+        "ID": "RetainFullBackups30Days",
+        "Filter": { "Prefix": "backups/full/" },
+        "Status": "Enabled",
+        "Expiration": { "Days": 30 }
+      },
+      {
+        "ID": "RetainDifferentialBackups7Days",
+        "Filter": { "Prefix": "backups/differential/" },
+        "Status": "Enabled",
+        "Expiration": { "Days": 7 }
+      },
+      {
+        "ID": "RetainLogBackups2Days",
+        "Filter": { "Prefix": "backups/log/" },
+        "Status": "Enabled",
+        "Expiration": { "Days": 2 }
+      }
+    ]
+  }'
+```
+
+And the corresponding EventBridge `Input` payloads would use:
+
+- `"S3_PREFIX": "backups/full/"` for the FULL rule
+- `"S3_PREFIX": "backups/differential/"` for the DIFFERENTIAL rule
+- `"S3_PREFIX": "backups/log/"` for the LOG rule
+
+Adjust the retention days to match your organization's recovery point objectives (RPO).
