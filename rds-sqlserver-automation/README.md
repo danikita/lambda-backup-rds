@@ -20,7 +20,7 @@ The backup file lands directly in **S3**, where lifecycle policies can be applie
 
 - **EC2 Bastion** — used once at setup to build and push the container image to ECR
 - **ECR** — stores the Docker image that packages the Lambda runtime and the ODBC driver for SQL Server
-- **Lambda** — executes the backup logic: connects to RDS, triggers the native backup, and writes the `.bak` or `.diff.bak` file to S3
+- **Lambda** — executes the backup logic: connects to RDS, triggers the native backup, and writes the `.bak` or `diff.bak` file to S3
 - **EventBridge** — schedules the Lambda invocations with different backup types and frequencies
 - **RDS SQL Server** — the source database; must have the `SQLSERVER_BACKUP_RESTORE` option group enabled
 - **S3** — the backup destination; organized by prefix per backup type, with lifecycle rules for automated retention
