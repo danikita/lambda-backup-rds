@@ -82,6 +82,11 @@ git clone https://github.com/danikita/lambda-backup-rds
 aws configure
 
 cd lambda-backup-rds/sqlserver-lambda
+
+git clone https://github.com/danikita/database-backup-upload-s3-automation
+aws configure
+
+cd database-backup-upload-s3-automation/rds-sqlserver-automation
 ```
 
 ---
