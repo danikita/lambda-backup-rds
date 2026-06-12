@@ -79,9 +79,9 @@ SSH into the bastion host, clone this repository, and configure the AWS CLI with
 
 ```bash
 git clone https://github.com/danikita/database-backup-upload-s3-automation
-aws configure
-
 cd database-backup-upload-s3-automation/rds-sqlserver-automation
+
+aws configure
 ```
 
 ---
